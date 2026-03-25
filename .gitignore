@@ -3,4 +3,5 @@ node_modules/
 .opencode/runtime/
 .opencode/cache/
 .opencode/generated/
+.opencode/state/
 coverage/
