@@ -27,9 +27,10 @@ From issue #10416 discussion, this profile also incorporates practical hardening
 ## Files
 
 - Generated runtime config: `.opencode/runtime/opencode.generated.json`
-- Local plugin loader: `.opencode/plugins/copilot-enterprise.js`
-- Runtime config renderer: `scripts/render-config.js`
-- OpenCode launcher wrapper: `scripts/run-opencode.js`
+- Global plugin loader (installed): `~/.config/opencode/plugins/copilot-enterprise-profile.js`
+- Runtime config renderer source: `scripts/render-config.ts`
+- OpenCode launcher wrapper source: `scripts/run-opencode.ts`
+- Compiled runtime entrypoints: `dist/scripts/*.js`
 
 ## Requirements
 
@@ -57,6 +58,12 @@ Or install directly from npm (after publish):
 
 ```bash
 npx opencode-github-copilot-enterprise-profile
+```
+
+Alternative executable alias:
+
+```bash
+npx opencode-copilot-enterprise-install
 ```
 
 This will:
