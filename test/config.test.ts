@@ -7,9 +7,18 @@ test("enforces privacy config requirements", () => {
     {
       id: "gpt-5",
       name: "GPT-5",
-      limits: {},
+      vendor: null,
+      limits: { context: null, output: null },
       supportsReasoning: true,
-      thinking: { supportedEfforts: ["low", "medium", "high"] },
+      capabilities: {},
+      endpoints: [],
+      thinking: {
+        adaptiveThinking: false,
+        minThinkingBudget: null,
+        maxThinkingBudget: null,
+        supportedEfforts: ["low", "medium", "high"],
+      },
+      raw: {},
     },
   ])
   assert.equal(cfg.share, "disabled")

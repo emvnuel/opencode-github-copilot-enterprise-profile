@@ -4,22 +4,31 @@
   "type": "module",
   "description": "OpenCode plugin/runtime for GitHub Copilot Enterprise model catalog and config overlays.",
   "files": [
-    "src",
-    "scripts",
+    "dist",
     "README.md"
   ],
   "bin": {
-    "opencode-copilot-enterprise-install": "./scripts/install-global.js"
+    "opencode-github-copilot-enterprise-profile": "./dist/scripts/install-global.js",
+    "opencode-copilot-enterprise-install": "./dist/scripts/install-global.js"
   },
   "exports": {
-    "./plugin": "./src/plugin.js",
-    "./provider": "./src/provider.js"
+    "./plugin": "./dist/src/plugin.js",
+    "./provider": "./dist/src/provider.js"
   },
   "scripts": {
-    "test": "node --test",
-    "render-config": "node ./scripts/render-config.js",
-    "run": "node ./scripts/run-opencode.js",
-    "install:global": "node ./scripts/install-global.js"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "render-config": "npm run build && node ./dist/scripts/render-config.js",
+    "run": "npm run build && node ./dist/scripts/run-opencode.js",
+    "install:global": "npm run build && node ./dist/scripts/install-global.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=20"

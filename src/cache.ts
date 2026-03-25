@@ -1,28 +1,30 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import type { CacheReadResult } from "./types.js"
 
-function expandHome(inputPath) {
+function expandHome(inputPath: string): string {
   if (inputPath === "~") return os.homedir()
   if (inputPath.startsWith("~/")) return path.join(os.homedir(), inputPath.slice(2))
   return inputPath
 }
 
-function nowMs() {
+function nowMs(): number {
   return Date.now()
 }
 
-export async function readJsonCache(filePath, maxAgeMs) {
+export async function readJsonCache<T>(filePath: string, maxAgeMs: number): Promise<CacheReadResult<T>> {
   const resolved = expandHome(filePath)
   try {
     const text = await readFile(resolved, "utf8")
-    const parsed = JSON.parse(text)
-    const age = nowMs() - Number(parsed?.updatedAt || 0)
+    const parsed = JSON.parse(text) as { updatedAt?: unknown; value?: T }
+    const updatedAt = Number(parsed?.updatedAt || 0)
+    const age = nowMs() - updatedAt
     return {
       hit: age >= 0 && age <= maxAgeMs,
       stale: age > maxAgeMs,
-      value: parsed?.value,
-      updatedAt: parsed?.updatedAt || 0,
+      value: parsed?.value ?? null,
+      updatedAt,
       path: resolved,
     }
   } catch {
@@ -30,7 +32,7 @@ export async function readJsonCache(filePath, maxAgeMs) {
   }
 }
 
-export async function writeJsonCache(filePath, value) {
+export async function writeJsonCache<T>(filePath: string, value: T): Promise<string> {
   const resolved = expandHome(filePath)
   const dir = path.dirname(resolved)
   await mkdir(dir, { recursive: true, mode: 0o700 })

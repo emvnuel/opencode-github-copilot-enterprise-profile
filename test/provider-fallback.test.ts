@@ -10,9 +10,9 @@ test("falls back to lower effort after unsupported rejection", async () => {
   const authPath = path.join(dir, "auth.json")
   await writeFile(authPath, JSON.stringify({ "github-copilot": { access: "token" } }), "utf8")
 
-  const attempts = []
+  const attempts: string[] = []
   const originalFetch = global.fetch
-  global.fetch = async (url, init) => {
+  global.fetch = async (url: URL | RequestInfo, init?: RequestInit): Promise<Response> => {
     if (String(url).endsWith("/models")) {
       return new Response(
         JSON.stringify({
@@ -22,10 +22,9 @@ test("falls back to lower effort after unsupported rejection", async () => {
       )
     }
 
-    const body = JSON.parse(init.body)
-
-    attempts.push(body.reasoning.effort)
-    if (body.reasoning.effort === "high") {
+    const body = JSON.parse(String(init?.body || "{}")) as { reasoning?: { effort?: string } }
+    attempts.push(body.reasoning?.effort || "")
+    if (body.reasoning?.effort === "high") {
       return new Response("unsupported effort", { status: 400 })
     }
     return new Response(JSON.stringify({ ok: true }), {

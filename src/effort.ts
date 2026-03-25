@@ -1,11 +1,13 @@
-const RESPONSES_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh"]
-const MESSAGES_ORDER = ["low", "medium", "high", "max"]
+import type { EndpointKind } from "./types.js"
 
-function normalizedOrder(endpointKind) {
+const RESPONSES_ORDER = ["none", "minimal", "low", "medium", "high", "xhigh"] as const
+const MESSAGES_ORDER = ["low", "medium", "high", "max"] as const
+
+function normalizedOrder(endpointKind: EndpointKind): readonly string[] {
   return endpointKind === "messages" ? MESSAGES_ORDER : RESPONSES_ORDER
 }
 
-function normalizeAlias(value, endpointKind) {
+function normalizeAlias(value: string, endpointKind: EndpointKind): string {
   const lower = String(value || "").toLowerCase()
   if (endpointKind === "messages") {
     if (["none", "minimal"].includes(lower)) return "low"
@@ -17,12 +19,12 @@ function normalizeAlias(value, endpointKind) {
   return lower
 }
 
-function budgetFiltered(order, minThinkingBudget, maxThinkingBudget) {
-  if (!Number.isFinite(maxThinkingBudget) || maxThinkingBudget <= 0) return order
-  if (!Number.isFinite(minThinkingBudget) || minThinkingBudget <= 0) return order
+function budgetFiltered(order: readonly string[], minThinkingBudget: number | null, maxThinkingBudget: number | null): string[] {
+  if (!Number.isFinite(maxThinkingBudget) || (maxThinkingBudget ?? 0) <= 0) return [...order]
+  if (!Number.isFinite(minThinkingBudget) || (minThinkingBudget ?? 0) <= 0) return [...order]
 
-  const ratio = Math.min(1, Math.max(0, minThinkingBudget / maxThinkingBudget))
-  const disallow = new Set()
+  const ratio = Math.min(1, Math.max(0, (minThinkingBudget as number) / (maxThinkingBudget as number)))
+  const disallow = new Set<string>()
 
   if (order === RESPONSES_ORDER) {
     if (ratio > 0) disallow.add("none")
@@ -37,7 +39,7 @@ function budgetFiltered(order, minThinkingBudget, maxThinkingBudget) {
   }
 
   const filtered = order.filter((effort) => !disallow.has(effort))
-  return filtered.length > 0 ? filtered : [order.at(-1)]
+  return filtered.length > 0 ? filtered : [order.at(-1) as string]
 }
 
 export function inferSupportedEfforts({
@@ -46,7 +48,13 @@ export function inferSupportedEfforts({
   minThinkingBudget = null,
   maxThinkingBudget = null,
   advertisedEfforts = [],
-}) {
+}: {
+  endpointKind?: EndpointKind
+  adaptiveThinking?: boolean
+  minThinkingBudget?: number | null
+  maxThinkingBudget?: number | null
+  advertisedEfforts?: string[]
+}): string[] {
   const order = normalizedOrder(endpointKind)
   const explicit = Array.isArray(advertisedEfforts)
     ? advertisedEfforts.map((value) => normalizeAlias(value, endpointKind)).filter((value) => order.includes(value))
@@ -63,11 +71,15 @@ export function inferSupportedEfforts({
   return budgetAware
 }
 
-export function clampEffort(requested, endpointKind = "responses", supportedEfforts = null) {
+export function clampEffort(
+  requested: string | undefined,
+  endpointKind: EndpointKind = "responses",
+  supportedEfforts: string[] | null = null,
+): string {
   const order = normalizedOrder(endpointKind)
   const allowed = Array.isArray(supportedEfforts) && supportedEfforts.length > 0
     ? order.filter((effort) => supportedEfforts.includes(effort))
-    : order
+    : [...order]
 
   const candidate = requested
     ? normalizeAlias(requested, endpointKind)
@@ -87,17 +99,25 @@ export function clampEffort(requested, endpointKind = "responses", supportedEffo
   return allowed[0]
 }
 
-export function downgradeEffort(current, endpointKind = "responses", supportedEfforts = null) {
+export function downgradeEffort(
+  current: string,
+  endpointKind: EndpointKind = "responses",
+  supportedEfforts: string[] | null = null,
+): string {
   const order = normalizedOrder(endpointKind)
   const allowed = Array.isArray(supportedEfforts) && supportedEfforts.length > 0
     ? order.filter((effort) => supportedEfforts.includes(effort))
-    : order
+    : [...order]
   const currentClamped = clampEffort(current, endpointKind, allowed)
   const idx = Math.max(0, allowed.indexOf(currentClamped))
   return idx > 0 ? allowed[idx - 1] : allowed[0]
 }
 
-export function effortChain(initial, endpointKind = "responses", supportedEfforts = null) {
+export function effortChain(
+  initial: string,
+  endpointKind: EndpointKind = "responses",
+  supportedEfforts: string[] | null = null,
+): string[] {
   const first = clampEffort(initial, endpointKind, supportedEfforts)
   const chain = [first]
   let current = first

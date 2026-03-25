@@ -84,7 +84,7 @@ Windows note:
 1. Render generated config from Copilot `/models`:
 
 ```bash
-OPENCODE_DISABLE_MODELS_FETCH=true COPILOT_BASE_URL=https://api.githubcopilot.com node scripts/render-config.js
+OPENCODE_DISABLE_MODELS_FETCH=true COPILOT_BASE_URL=https://api.githubcopilot.com npm run render-config
 ```
 
 The generated config uses provider key `github-copilot` and only overrides `provider.github-copilot.models`.
@@ -92,7 +92,7 @@ The generated config uses provider key `github-copilot` and only overrides `prov
 2. Run OpenCode using generated config:
 
 ```bash
-OPENCODE_DISABLE_MODELS_FETCH=true node scripts/run-opencode.js
+OPENCODE_DISABLE_MODELS_FETCH=true npm run run -- models
 ```
 
 This wrapper injects generated config via `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT` to ensure runtime overrides apply.
@@ -100,7 +100,7 @@ This wrapper injects generated config via `OPENCODE_CONFIG` and `OPENCODE_CONFIG
 Optional strict/offline-ish flags:
 
 ```bash
-OPENCODE_PROFILE_OFFLINE=true OPENCODE_DISABLE_DEFAULT_PLUGINS=true OPENCODE_DISABLE_MODELS_FETCH=true node scripts/run-opencode.js
+OPENCODE_PROFILE_OFFLINE=true OPENCODE_DISABLE_DEFAULT_PLUGINS=true OPENCODE_DISABLE_MODELS_FETCH=true npm run run -- models
 ```
 
 If needed in enterprise packaging:
@@ -129,6 +129,11 @@ OPENCODE_MODELS_URL=<local models index path or URL>
 ```bash
 npm test
 ```
+
+## TypeScript
+
+- Source is fully TypeScript in `src/**/*.ts`, `scripts/**/*.ts`, and `test/**/*.ts`.
+- Build output is emitted to `dist/` via `npm run build`.
 
 ## Release automation
 

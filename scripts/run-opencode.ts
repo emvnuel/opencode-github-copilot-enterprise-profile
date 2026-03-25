@@ -4,10 +4,13 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const root = path.join(__dirname, "..")
-const rendered = process.env.OPENCODE_RENDERED_CONFIG || path.join(root, ".opencode/runtime/opencode.generated.json")
+const workspaceRootCandidate = path.join(__dirname, "..")
+const workspaceRoot = path.basename(workspaceRootCandidate) === "dist"
+  ? path.join(workspaceRootCandidate, "..")
+  : workspaceRootCandidate
+const rendered = process.env.OPENCODE_RENDERED_CONFIG || path.join(workspaceRoot, ".opencode/runtime/opencode.generated.json")
 
-async function ensureConfig() {
+async function ensureConfig(): Promise<void> {
   try {
     await readFile(rendered, "utf8")
   } catch {
@@ -18,13 +21,13 @@ async function ensureConfig() {
         OPENCODE_DISABLE_MODELS_FETCH: process.env.OPENCODE_DISABLE_MODELS_FETCH || "true",
       },
     })
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       proc.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`render-config failed: ${code}`))))
     })
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   await ensureConfig()
   const renderedContent = await readFile(rendered, "utf8")
 
@@ -42,7 +45,7 @@ async function main() {
   proc.on("exit", (code) => process.exit(code ?? 0))
 }
 
-main().catch((error) => {
-  console.error(error.message)
+main().catch((error: unknown) => {
+  console.error((error as Error).message)
   process.exit(1)
 })

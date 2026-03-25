@@ -1,13 +1,34 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
+import type { NormalizedModel } from "./types.js"
 
-function toVariantMap(model) {
+interface OpenCodeModelEntry {
+  name: string
+  variants: Record<string, { reasoningEffort: string }>
+  limit?: { context: number; output: number }
+}
+
+interface OpenCodeConfig {
+  $schema: string
+  share: "disabled"
+  disabled_providers: string[]
+  enabled_providers: string[]
+  provider: {
+    "github-copilot": {
+      models: Record<string, OpenCodeModelEntry>
+    }
+  }
+  model: string
+  small_model: string
+}
+
+function toVariantMap(model: NormalizedModel): Record<string, { reasoningEffort: string }> {
   if (!model.supportsReasoning) return {}
 
   const supported = Array.isArray(model.thinking?.supportedEfforts)
     ? model.thinking.supportedEfforts
     : []
-  const out = {}
+  const out: Record<string, { reasoningEffort: string }> = {}
   for (const effort of ["low", "medium", "high", "max", "xhigh"]) {
     if (!supported.includes(effort)) continue
     out[effort] = { reasoningEffort: effort }
@@ -22,18 +43,18 @@ function toVariantMap(model) {
   }
 }
 
-export function buildProviderModels(models) {
-  const entries = {}
+export function buildProviderModels(models: NormalizedModel[]): Record<string, OpenCodeModelEntry> {
+  const entries: Record<string, OpenCodeModelEntry> = {}
   for (const model of models) {
-    const entry = {
+    const entry: OpenCodeModelEntry = {
       name: model.name,
       variants: toVariantMap(model),
     }
 
     if (Number.isFinite(model.limits?.context) && Number.isFinite(model.limits?.output)) {
       entry.limit = {
-        context: model.limits.context,
-        output: model.limits.output,
+        context: model.limits.context as number,
+        output: model.limits.output as number,
       }
     }
 
@@ -42,12 +63,12 @@ export function buildProviderModels(models) {
   return entries
 }
 
-export function pickDefaultModel(models) {
+export function pickDefaultModel(models: NormalizedModel[]): string | null {
   if (!Array.isArray(models) || models.length === 0) return null
   return models[0].id
 }
 
-export function buildOpenCodeConfig(models) {
+export function buildOpenCodeConfig(models: NormalizedModel[]): OpenCodeConfig {
   const defaultModel = pickDefaultModel(models)
   const modelId = defaultModel
     ? `github-copilot/${defaultModel}`
@@ -68,7 +89,7 @@ export function buildOpenCodeConfig(models) {
   }
 }
 
-export async function writeConfigFile(filePath, config) {
+export async function writeConfigFile(filePath: string, config: OpenCodeConfig): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true })
   await writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, "utf8")
 }

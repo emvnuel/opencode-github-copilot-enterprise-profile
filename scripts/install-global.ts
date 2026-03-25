@@ -7,18 +7,20 @@ import { spawn } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const root = path.join(__dirname, "..")
+const workspaceRootCandidate = path.join(__dirname, "..")
+const root = path.basename(workspaceRootCandidate) === "dist"
+  ? path.join(workspaceRootCandidate, "..")
+  : workspaceRootCandidate
 const generatedPath = path.join(root, ".opencode", "runtime", "opencode.generated.json")
-const pluginEntryPath = path.join(root, "src", "plugin.js")
+const pluginEntryPath = path.join(root, "dist", "src", "plugin.js")
 
-function resolveHome(inputPath) {
-  if (!inputPath) return inputPath
+function resolveHome(inputPath: string): string {
   if (inputPath === "~") return os.homedir()
   if (inputPath.startsWith("~/")) return path.join(os.homedir(), inputPath.slice(2))
   return inputPath
 }
 
-function detectGlobalConfigDir() {
+function detectGlobalConfigDir(): string {
   if (process.env.OPENCODE_CONFIG_DIR) {
     return resolveHome(process.env.OPENCODE_CONFIG_DIR)
   }
@@ -42,28 +44,28 @@ const pluginLoader = `import { CopilotEnterpriseProfilePlugin } from "${pathToFi
 export const Plugin = CopilotEnterpriseProfilePlugin
 `
 
-function deepMerge(a, b) {
+function deepMerge(a: unknown, b: unknown): unknown {
   if (Array.isArray(a) || Array.isArray(b)) return b
   if (!a || typeof a !== "object") return b
   if (!b || typeof b !== "object") return a
 
-  const out = { ...a }
-  for (const [key, value] of Object.entries(b)) {
+  const out: Record<string, unknown> = { ...(a as Record<string, unknown>) }
+  for (const [key, value] of Object.entries(b as Record<string, unknown>)) {
     out[key] = key in out ? deepMerge(out[key], value) : value
   }
   return out
 }
 
-async function readJson(filePath, fallback) {
+async function readJson<T>(filePath: string, fallback: T): Promise<T> {
   try {
     const text = await readFile(filePath, "utf8")
-    return JSON.parse(text)
+    return JSON.parse(text) as T
   } catch {
     return fallback
   }
 }
 
-async function runRenderConfig() {
+async function runRenderConfig(): Promise<void> {
   const proc = spawn(process.execPath, [path.join(__dirname, "render-config.js")], {
     stdio: "inherit",
     env: {
@@ -72,39 +74,41 @@ async function runRenderConfig() {
     },
   })
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     proc.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`render-config failed: ${code}`))))
   })
 }
 
-async function installPluginLoader() {
+async function installPluginLoader(): Promise<void> {
   await mkdir(globalPluginsDir, { recursive: true })
   await writeFile(path.join(globalPluginsDir, "copilot-enterprise-profile.js"), pluginLoader, "utf8")
 }
 
-async function installGlobalConfig() {
-  const generated = await readJson(generatedPath, null)
+async function installGlobalConfig(): Promise<void> {
+  const generated = await readJson<Record<string, unknown> | null>(generatedPath, null)
   if (!generated) throw new Error(`Missing generated config at ${generatedPath}`)
 
-  const existing = await readJson(globalConfigFile, {})
+  const existing = await readJson<Record<string, unknown>>(globalConfigFile, {})
+  const models =
+    ((generated.provider as Record<string, unknown> | undefined)?.["github-copilot"] as Record<string, unknown> | undefined)?.models || {}
   const merged = deepMerge(existing, {
     share: "disabled",
     disabled_providers: ["opencode"],
     enabled_providers: ["github-copilot"],
     provider: {
       "github-copilot": {
-        models: generated?.provider?.["github-copilot"]?.models || {},
+        models,
       },
     },
     model: generated.model,
     small_model: generated.small_model,
-  })
+  }) as Record<string, unknown>
 
   await mkdir(globalConfigDir, { recursive: true })
   await writeFile(globalConfigFile, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
 }
 
-async function ensureUnixShellEnv() {
+async function ensureUnixShellEnv(): Promise<void> {
   const line = "export OPENCODE_DISABLE_MODELS_FETCH=true"
   const shellProfiles = [".zshrc", ".bashrc"]
 
@@ -118,7 +122,7 @@ async function ensureUnixShellEnv() {
   }
 }
 
-async function ensureWindowsShellEnv() {
+async function ensureWindowsShellEnv(): Promise<void> {
   const userProfile = process.env.USERPROFILE || os.homedir()
   const line = "$env:OPENCODE_DISABLE_MODELS_FETCH = \"true\""
   const powershellProfiles = [
@@ -135,14 +139,14 @@ async function ensureWindowsShellEnv() {
     await writeFile(profilePath, next, "utf8")
   }
 
-  await new Promise((resolve) => {
+  await new Promise<void>((resolve) => {
     const proc = spawn("cmd", ["/c", "setx OPENCODE_DISABLE_MODELS_FETCH true"], { stdio: "ignore" })
     proc.on("exit", () => resolve())
     proc.on("error", () => resolve())
   })
 }
 
-async function ensurePersistentEnv() {
+async function ensurePersistentEnv(): Promise<void> {
   if (process.platform === "win32") {
     await ensureWindowsShellEnv()
     return
@@ -151,7 +155,7 @@ async function ensurePersistentEnv() {
   await ensureUnixShellEnv()
 }
 
-async function main() {
+async function main(): Promise<void> {
   await runRenderConfig()
   await installPluginLoader()
   await installGlobalConfig()
@@ -161,7 +165,7 @@ async function main() {
   )
 }
 
-main().catch((error) => {
-  console.error(error.message)
+main().catch((error: unknown) => {
+  console.error((error as Error).message)
   process.exit(1)
 })

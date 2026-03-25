@@ -4,10 +4,13 @@ import { createCatalogClient } from "../src/catalog.js"
 import { buildOpenCodeConfig, writeConfigFile } from "../src/config.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const root = path.join(__dirname, "..")
-const outPath = process.env.OPENCODE_RENDERED_CONFIG || path.join(root, ".opencode/runtime/opencode.generated.json")
+const workspaceRootCandidate = path.join(__dirname, "..")
+const workspaceRoot = path.basename(workspaceRootCandidate) === "dist"
+  ? path.join(workspaceRootCandidate, "..")
+  : workspaceRootCandidate
+const outPath = process.env.OPENCODE_RENDERED_CONFIG || path.join(workspaceRoot, ".opencode/runtime/opencode.generated.json")
 
-async function main() {
+async function main(): Promise<void> {
   if (process.env.OPENCODE_DISABLE_MODELS_FETCH !== "true") {
     throw new Error("OPENCODE_DISABLE_MODELS_FETCH=true is required")
   }
@@ -26,7 +29,7 @@ async function main() {
   try {
     models = await client.refresh()
   } catch (error) {
-    console.warn(`Refresh failed, using cache: ${error?.message || error}`)
+    console.warn(`Refresh failed, using cache: ${(error as Error)?.message || error}`)
     models = await client.get()
   }
 
@@ -35,7 +38,7 @@ async function main() {
   process.stdout.write(`${outPath}\n`)
 }
 
-main().catch((error) => {
-  console.error(error.message)
+main().catch((error: unknown) => {
+  console.error((error as Error).message)
   process.exit(1)
 })

@@ -1,27 +1,38 @@
 import { buildCopilotHeaders, readCopilotAccessToken } from "./auth.js"
 import { createCatalogClient } from "./catalog.js"
 import { effortChain } from "./effort.js"
+import type { EndpointKind, Logger } from "./types.js"
 
-function withPath(baseUrl, p) {
+function withPath(baseUrl: string, p: string): string {
   const base = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl
   const segment = p.startsWith("/") ? p : `/${p}`
   return `${base}${segment}`
 }
 
-function isUnsupportedError(status, bodyText) {
+function isUnsupportedError(status: number, bodyText: string): boolean {
   if (status < 400 || status >= 500) return false
   const text = String(bodyText || "").toLowerCase()
   return text.includes("unsupported") || text.includes("not supported") || text.includes("invalid")
 }
 
-function endpointForModel(model) {
+function endpointForModel(model: { endpoints?: string[] }): EndpointKind {
   const endpoints = model.endpoints || []
   if (endpoints.includes("responses")) return "responses"
   if (endpoints.includes("messages")) return "messages"
   return "responses"
 }
 
-function buildBody({ modelId, endpointKind, effort, input }) {
+function buildBody({
+  modelId,
+  endpointKind,
+  effort,
+  input,
+}: {
+  modelId: string
+  endpointKind: EndpointKind
+  effort: string
+  input: { input?: string; prompt?: string; messages?: unknown[] }
+}): Record<string, unknown> {
   if (endpointKind === "messages") {
     return {
       model: modelId,
@@ -45,11 +56,29 @@ export function createCopilotProvider({
   messagesPath = "/messages",
   cacheFile,
   logger,
+}: {
+  baseUrl: string
+  authFile?: string
+  modelsPath?: string
+  responsesPath?: string
+  messagesPath?: string
+  cacheFile?: string
+  logger?: Logger | null
 }) {
   const catalog = createCatalogClient({ baseUrl, authFile, modelsPath, cacheFile, logger })
-  const negotiated = new Map()
+  const negotiated = new Map<string, { endpointKind: EndpointKind; effort: string }>()
 
-  async function invoke({ modelId, effort = "medium", input, signal }) {
+  async function invoke({
+    modelId,
+    effort = "medium",
+    input,
+    signal,
+  }: {
+    modelId: string
+    effort?: string
+    input: { input?: string; prompt?: string; messages?: unknown[] }
+    signal?: AbortSignal
+  }): Promise<{ endpointKind: EndpointKind; effort: string; payload: unknown }> {
     const models = await catalog.get(signal)
     const model = models.find((m) => m.id === modelId)
     if (!model) throw new Error(`Model not found in upstream catalog: ${modelId}`)
@@ -62,11 +91,11 @@ export function createCopilotProvider({
       : null
 
     const efforts = negotiated.get(modelId)?.effort
-      ? [negotiated.get(modelId).effort]
+      ? [negotiated.get(modelId)?.effort as string]
       : effortChain(effort, endpointKind, supportedEfforts)
     const requestPath = endpointKind === "messages" ? messagesPath : responsesPath
 
-    let lastError = null
+    let lastError: Error | null = null
     for (const candidate of efforts) {
       const body = buildBody({ modelId, endpointKind, effort: candidate, input })
       const response = await fetch(withPath(baseUrl, requestPath), {

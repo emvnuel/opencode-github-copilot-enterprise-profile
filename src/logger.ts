@@ -1,19 +1,27 @@
-const REDACT_KEYS = ["authorization", "token", "access", "apiKey", "prompt"]
+import type { Logger } from "./types.js"
 
-function redactObject(value) {
+const REDACT_KEYS = ["authorization", "token", "access", "apikey", "prompt"]
+
+function redactObject(value: unknown): unknown {
   if (!value || typeof value !== "object") return value
   if (Array.isArray(value)) return value.map(redactObject)
 
-  const out = {}
-  for (const [key, val] of Object.entries(value)) {
+  const out: Record<string, unknown> = {}
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
     const lower = key.toLowerCase()
     out[key] = REDACT_KEYS.some((k) => lower.includes(k)) ? "[redacted]" : redactObject(val)
   }
   return out
 }
 
-export function createLogger(client) {
-  const emit = async (level, message, extra = {}) => {
+type OpenCodeClient = {
+  app?: {
+    log?: (input: { body: Record<string, unknown> }) => Promise<void>
+  }
+}
+
+export function createLogger(client?: OpenCodeClient): Logger {
+  const emit = async (level: string, message: string, extra: Record<string, unknown> = {}): Promise<void> => {
     const body = {
       service: "copilot-enterprise-profile",
       level,
@@ -26,7 +34,7 @@ export function createLogger(client) {
       return
     }
 
-    const payload = { level, message, ...body.extra }
+    const payload = { level, message, ...(body.extra as Record<string, unknown>) }
     if (level === "error") {
       console.error(payload)
     } else {
