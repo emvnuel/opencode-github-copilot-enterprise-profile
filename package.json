@@ -1,0 +1,30 @@
+{
+  "name": "opencode-github-copilot-enterprise-profile",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "OpenCode plugin/runtime for GitHub Copilot Enterprise model catalog and config overlays.",
+  "files": [
+    "src",
+    "scripts",
+    "README.md"
+  ],
+  "bin": {
+    "opencode-copilot-enterprise-install": "./scripts/install-global.js"
+  },
+  "exports": {
+    "./plugin": "./src/plugin.js",
+    "./provider": "./src/provider.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "render-config": "node ./scripts/render-config.js",
+    "run": "node ./scripts/run-opencode.js",
+    "install:global": "node ./scripts/install-global.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
