@@ -37,6 +37,7 @@ test("detects reasoning and limits from capabilities.supports and capabilities.l
       {
         id: "gpt-5.3-codex",
         name: "GPT-5.3-Codex",
+        release_date: "2026-02-24",
         capabilities: {
           limits: {
             max_context_window_tokens: 400000,
@@ -57,4 +58,5 @@ test("detects reasoning and limits from capabilities.supports and capabilities.l
   assert.deepEqual(out[0].endpoints, ["responses"])
   assert.equal(out[0].limits.context, 400000)
   assert.equal(out[0].limits.output, 128000)
+  assert.equal(out[0].releaseDate, "2026-02-24")
 })

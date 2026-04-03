@@ -94,6 +94,7 @@ export function normalizeModel(raw: JsonRecord): NormalizedModel {
     id: String(raw.id || ""),
     name: String(raw.name || raw.id || ""),
     vendor: raw.vendor ? String(raw.vendor) : null,
+    releaseDate: raw.release_date ? String(raw.release_date) : null,
     limits: extractLimits(raw),
     supportsReasoning: detectReasoningSupport(raw),
     capabilities,

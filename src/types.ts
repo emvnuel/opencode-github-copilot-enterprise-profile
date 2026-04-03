@@ -11,6 +11,7 @@ export interface NormalizedModel {
   id: string
   name: string
   vendor: string | null
+  releaseDate: string | null
   limits: {
     context: number | null
     output: number | null

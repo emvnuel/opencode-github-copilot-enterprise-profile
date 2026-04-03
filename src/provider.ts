@@ -90,9 +90,11 @@ export function createCopilotProvider({
       ? model.thinking.supportedEfforts
       : null
 
-    const efforts = negotiated.get(modelId)?.effort
-      ? [negotiated.get(modelId)?.effort as string]
-      : effortChain(effort, endpointKind, supportedEfforts)
+    const negotiatedEffort = negotiated.get(modelId)?.effort
+    const requested = effortChain(effort, endpointKind, supportedEfforts)
+    const efforts = negotiatedEffort && !requested.includes(negotiatedEffort)
+      ? [negotiatedEffort, ...requested]
+      : requested
     const requestPath = endpointKind === "messages" ? messagesPath : responsesPath
 
     let lastError: Error | null = null

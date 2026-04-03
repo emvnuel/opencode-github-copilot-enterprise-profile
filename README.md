@@ -74,7 +74,7 @@ This will:
   - `disabled_providers: ["opencode"]`
   - `enabled_providers: ["github-copilot"]`
   - `provider.github-copilot.models` overrides
-  - `model` and `small_model`
+  - `model` and `small_model` (always `github-copilot/gpt-5-mini`)
 - persist `OPENCODE_DISABLE_MODELS_FETCH=true` in shell profiles
 
 No extra manual config steps are needed after this.
@@ -126,9 +126,14 @@ OPENCODE_MODELS_URL=<local models index path or URL>
 ## Thinking variant behavior
 
 - The runtime inspects model capabilities from upstream `/models`.
-- If `capabilities.supports.adaptive_thinking` is present, messages-style effort (`low|medium|high|max`) is preferred.
-- If min/max thinking budgets are present, generated variants are budget-aware.
-- If explicit effort levels are exposed by upstream metadata, those are used directly.
+- Variants are generated with provider/model-aware rules (Copilot-focused):
+  - non-reasoning models -> no variants
+  - `gemini*` -> no variants
+  - `claude*` -> `thinking` variant (`thinking_budget: 4000`)
+  - `gpt-5.1-codex-max`, `gpt-5.2*`, `gpt-5.3*` -> `low|medium|high|xhigh`
+  - other `gpt-5*` reasoning models -> `low|medium|high`, plus `xhigh` when `release_date >= 2025-12-04`
+- Effort variants use `reasoningEffort`, `reasoningSummary: "auto"`, and `include: ["reasoning.encrypted_content"]`.
+- Variant overrides can disable specific variants with `disabled: true`; disabled variants are removed and the `disabled` key is stripped from final config payload.
 - At request time, unsupported effort values are downgraded automatically.
 
 ## Tests
