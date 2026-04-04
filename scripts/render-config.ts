@@ -10,6 +10,11 @@ const workspaceRoot = path.basename(workspaceRootCandidate) === "dist"
   : workspaceRootCandidate
 const outPath = process.env.OPENCODE_RENDERED_CONFIG || path.join(workspaceRoot, ".opencode/runtime/opencode.generated.json")
 
+function envFlag(name: string): boolean {
+  const value = String(process.env[name] || "").trim().toLowerCase()
+  return value === "1" || value === "true" || value === "yes" || value === "on"
+}
+
 async function main(): Promise<void> {
   if (process.env.OPENCODE_DISABLE_MODELS_FETCH !== "true") {
     throw new Error("OPENCODE_DISABLE_MODELS_FETCH=true is required")
@@ -33,7 +38,9 @@ async function main(): Promise<void> {
     models = await client.get()
   }
 
-  const config = buildOpenCodeConfig(models)
+  const config = buildOpenCodeConfig(models, undefined, {
+    lightweightSubagents: envFlag("OPENCODE_LIGHTWEIGHT_SUBAGENTS"),
+  })
   await writeConfigFile(outPath, config)
   process.stdout.write(`${outPath}\n`)
 }

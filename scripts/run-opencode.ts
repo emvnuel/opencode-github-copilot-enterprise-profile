@@ -10,14 +10,16 @@ const workspaceRoot = path.basename(workspaceRootCandidate) === "dist"
   : workspaceRootCandidate
 const rendered = process.env.OPENCODE_RENDERED_CONFIG || path.join(workspaceRoot, ".opencode/runtime/opencode.generated.json")
 
-async function ensureConfig(): Promise<void> {
+async function ensureConfig(extraEnv: Record<string, string>, forceRender = false): Promise<void> {
   try {
+    if (forceRender) throw new Error("forced render")
     await readFile(rendered, "utf8")
   } catch {
     const proc = spawn(process.execPath, [path.join(__dirname, "render-config.js")], {
       stdio: "inherit",
       env: {
         ...process.env,
+        ...extraEnv,
         OPENCODE_DISABLE_MODELS_FETCH: process.env.OPENCODE_DISABLE_MODELS_FETCH || "true",
       },
     })
@@ -28,15 +30,21 @@ async function ensureConfig(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  await ensureConfig()
+  const includeLightweightSubagents = process.argv.slice(2).includes("--lightweight-subagents")
+  const envOverrides: Record<string, string> = includeLightweightSubagents
+    ? { OPENCODE_LIGHTWEIGHT_SUBAGENTS: "true" }
+    : {}
+
+  await ensureConfig(envOverrides, includeLightweightSubagents)
   const renderedContent = await readFile(rendered, "utf8")
 
-  const args = process.argv.slice(2)
+  const args = process.argv.slice(2).filter((arg) => arg !== "--lightweight-subagents")
   const proc = spawn("opencode", args, {
     stdio: "inherit",
     env: {
       ...process.env,
       OPENCODE_DISABLE_MODELS_FETCH: process.env.OPENCODE_DISABLE_MODELS_FETCH || "true",
+      ...envOverrides,
       OPENCODE_CONFIG: rendered,
       OPENCODE_CONFIG_CONTENT: renderedContent,
     },

@@ -407,3 +407,87 @@ test("supports provider/model/variant parsing", () => {
     variant: null,
   })
 })
+
+test("optionally assigns lightweight high-reasoning model to general and explore agents", () => {
+  const cfg = buildOpenCodeConfig(
+    [
+      mkModel({
+        id: "gpt-5-mini",
+        modelPickerEnabled: true,
+        modelPickerCategory: "lightweight",
+        supportsReasoning: true,
+        limits: { context: 264000, output: 64000 },
+        thinking: {
+          adaptiveThinking: false,
+          minThinkingBudget: null,
+          maxThinkingBudget: null,
+          supportedEfforts: ["low", "medium", "high"],
+        },
+      }),
+      mkModel({
+        id: "gpt-5.4-mini",
+        modelPickerEnabled: true,
+        modelPickerCategory: "lightweight",
+        supportsReasoning: true,
+        limits: { context: 400000, output: 128000 },
+        thinking: {
+          adaptiveThinking: false,
+          minThinkingBudget: null,
+          maxThinkingBudget: null,
+          supportedEfforts: ["none", "low", "medium", "high", "xhigh"],
+        },
+      }),
+    ],
+    undefined,
+    { lightweightSubagents: true },
+  )
+
+  assert.deepEqual(cfg.agent?.general, {
+    model: "github-copilot/gpt-5.4-mini",
+    variant: "high",
+  })
+  assert.deepEqual(cfg.agent?.explore, {
+    model: "github-copilot/gpt-5.4-mini",
+    variant: "high",
+  })
+})
+
+test("uses second-highest reasoning effort from metadata order", () => {
+  const cfg = buildOpenCodeConfig(
+    [
+      mkModel({
+        id: "weird-effort-model",
+        modelPickerEnabled: true,
+        modelPickerCategory: "lightweight",
+        supportsReasoning: true,
+        limits: { context: 1000, output: 1000 },
+        thinking: {
+          adaptiveThinking: false,
+          minThinkingBudget: null,
+          maxThinkingBudget: null,
+          supportedEfforts: ["banana", "cebola", "ultrayasmingostosa"],
+        },
+      }),
+    ],
+    undefined,
+    { lightweightSubagents: true },
+  )
+
+  assert.deepEqual(cfg.agent?.general, {
+    model: "github-copilot/weird-effort-model",
+    variant: "cebola",
+  })
+})
+
+test("does not set agent override when lightweight subagents option is off", () => {
+  const cfg = buildOpenCodeConfig([
+    mkModel({
+      id: "gpt-5-mini",
+      modelPickerEnabled: true,
+      modelPickerCategory: "lightweight",
+      supportsReasoning: true,
+    }),
+  ])
+
+  assert.equal(cfg.agent, undefined)
+})

@@ -28,6 +28,15 @@ interface OpenCodeConfigOverrides {
   }
 }
 
+interface BuildOpenCodeConfigOptions {
+  lightweightSubagents?: boolean
+}
+
+interface OpenCodeAgentEntry {
+  model: string
+  variant?: string
+}
+
 interface OpenCodeConfig {
   $schema: string
   share: "disabled"
@@ -41,6 +50,10 @@ interface OpenCodeConfig {
   }
   model: string
   small_model: string
+  agent?: {
+    general?: OpenCodeAgentEntry
+    explore?: OpenCodeAgentEntry
+  }
 }
 
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
@@ -63,6 +76,10 @@ function releaseTimestamp(value: string | null): number {
 
 function isPowerfulModel(model: NormalizedModel): boolean {
   return model.modelPickerCategory === "powerful"
+}
+
+function isLightweightModel(model: NormalizedModel): boolean {
+  return model.modelPickerCategory === "lightweight"
 }
 
 function normalizedEfforts(efforts: string[]): string[] {
@@ -353,7 +370,28 @@ function pickSmallModel(models: NormalizedModel[]): string | null {
   return null
 }
 
-export function buildOpenCodeConfig(models: NormalizedModel[], overrides?: OpenCodeConfigOverrides): OpenCodeConfig {
+function pickLightweightAgentModel(models: NormalizedModel[]): NormalizedModel | null {
+  const lightweight = models.filter((model) => isLightweightModel(model))
+  if (lightweight.length === 0) return null
+  return [...lightweight].sort(compareDefaultCandidates)[0] || null
+}
+
+function pickHighReasoningVariant(model: NormalizedModel): string | null {
+  const metadataEfforts = normalizedEfforts(model.thinking?.supportedEfforts || [])
+  if (metadataEfforts.length >= 2) return metadataEfforts[metadataEfforts.length - 2]
+  if (metadataEfforts.length === 1) return metadataEfforts[0]
+
+  const available = Object.keys(buildCopilotVariants(model))
+  if (available.length >= 2) return available[available.length - 2]
+  if (available.length === 1) return available[0]
+  return null
+}
+
+export function buildOpenCodeConfig(
+  models: NormalizedModel[],
+  overrides?: OpenCodeConfigOverrides,
+  options?: BuildOpenCodeConfigOptions,
+): OpenCodeConfig {
   const enabledModels = models.filter((model) => isModelEnabledForConfig(model))
   const defaultModel = pickDefaultModel(enabledModels)
   const smallModel = pickSmallModel(enabledModels)
@@ -369,7 +407,7 @@ export function buildOpenCodeConfig(models: NormalizedModel[], overrides?: OpenC
     ? Object.fromEntries(Object.entries(modelOverridesRaw).filter(([modelIdKey]) => enabledIds.has(modelIdKey)))
     : undefined
 
-  return {
+  const config: OpenCodeConfig = {
     $schema: "https://opencode.ai/config.json",
     share: "disabled",
     disabled_providers: ["opencode"],
@@ -383,6 +421,21 @@ export function buildOpenCodeConfig(models: NormalizedModel[], overrides?: OpenC
     model: modelId,
     small_model: smallModelId,
   }
+
+  if (options?.lightweightSubagents) {
+    const lightweightModel = pickLightweightAgentModel(enabledModels)
+    if (lightweightModel) {
+      const model = `github-copilot/${lightweightModel.id}`
+      const variant = pickHighReasoningVariant(lightweightModel)
+      const agentEntry: OpenCodeAgentEntry = variant ? { model, variant } : { model }
+      config.agent = {
+        general: { ...agentEntry },
+        explore: { ...agentEntry },
+      }
+    }
+  }
+
+  return config
 }
 
 export async function writeConfigFile(filePath: string, config: OpenCodeConfig): Promise<void> {

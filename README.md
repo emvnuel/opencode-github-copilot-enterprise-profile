@@ -111,6 +111,14 @@ Optional strict/offline-ish flags:
 OPENCODE_PROFILE_OFFLINE=true OPENCODE_DISABLE_DEFAULT_PLUGINS=true OPENCODE_DISABLE_MODELS_FETCH=true npm run run -- models
 ```
 
+Optional subagent model override (lightweight + high reasoning):
+
+```bash
+OPENCODE_DISABLE_MODELS_FETCH=true npm run run -- --lightweight-subagents models
+```
+
+This enables `OPENCODE_LIGHTWEIGHT_SUBAGENTS=true` during config rendering and sets `agent.general` + `agent.explore` to the best enabled `model_picker_category: "lightweight"` model with the second-highest reasoning effort from metadata order (for example: `low,medium,high,xhigh` -> `high`).
+
 If needed in enterprise packaging:
 
 ```bash
