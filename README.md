@@ -7,11 +7,12 @@ Privacy-first OpenCode plugin and config renderer for enterprise Copilot environ
 - OpenCode share is disabled in generated config.
 - `disabled_providers` contains only `opencode`.
 - Models are sourced from upstream Copilot `GET /models` (authoritative metadata source).
+- Only models with `model_picker_enabled: true` and non-disabled picker policy are included in generated provider config.
+- Generated config also sets `provider.github-copilot.whitelist` to the same filtered model IDs, so picker/listing is restricted to allowed models.
+- Default `model` is selected from enabled `model_picker_category: "powerful"` models first (premium + capability-first ranking), then falls back deterministically.
+- Default `small_model` is the strongest enabled non-premium model by capability-first ranking; when premium metadata is missing in upstream payloads, conservative non-premium ID heuristics are applied.
 - `OPENCODE_DISABLE_MODELS_FETCH=true` is treated as mandatory for startup scripts.
-- Thinking variants are derived from Copilot capabilities, prioritizing:
-  - `capabilities.supports.max_thinking_budget`
-  - `capabilities.supports.min_thinking_budget`
-  - `capabilities.supports.adaptive_thinking`
+- Thinking variants are metadata-first from `capabilities.supports.reasoning_effort` when available.
 
 ## Why this exists
 
@@ -74,7 +75,7 @@ This will:
   - `disabled_providers: ["opencode"]`
   - `enabled_providers: ["github-copilot"]`
   - `provider.github-copilot.models` overrides
-  - `model` and `small_model` (always `github-copilot/gpt-5-mini`)
+  - `model` and `small_model` derived from upstream model metadata
 - persist `OPENCODE_DISABLE_MODELS_FETCH=true` in shell profiles
 
 No extra manual config steps are needed after this.
@@ -126,7 +127,8 @@ OPENCODE_MODELS_URL=<local models index path or URL>
 ## Thinking variant behavior
 
 - The runtime inspects model capabilities from upstream `/models`.
-- Variants are generated with provider/model-aware rules (Copilot-focused):
+- Variants are generated metadata-first from `capabilities.supports.reasoning_effort` (normalized to endpoint-compatible effort aliases).
+- When metadata efforts are absent, compatibility fallbacks remain:
   - non-reasoning models -> no variants
   - `gemini*` -> no variants
   - `claude*` -> `thinking` variant (`thinking_budget: 4000`)

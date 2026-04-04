@@ -11,6 +11,10 @@ export interface NormalizedModel {
   id: string
   name: string
   vendor: string | null
+  modelPickerEnabled: boolean
+  modelPickerCategory: string | null
+  isPremium: boolean
+  premiumMetadataKnown: boolean
   releaseDate: string | null
   limits: {
     context: number | null

@@ -15,10 +15,35 @@ function isUnsupportedError(status: number, bodyText: string): boolean {
   return text.includes("unsupported") || text.includes("not supported") || text.includes("invalid")
 }
 
+function canonicalEndpointKind(value: string): EndpointKind | null {
+  const endpoint = String(value || "").toLowerCase().trim().split("?")[0].split("#")[0]
+  const withoutScheme = endpoint
+    .replace(/^https?:\/\/[^/]+/, "")
+    .replace(/^wss?:\/\/[^/]+/, "")
+  const withoutLeadingSlash = withoutScheme.replace(/^\/+/, "")
+  const key = withoutLeadingSlash.replace(/^wss?:\//, "")
+
+  if (key === "responses" || key === "v1/responses") return "responses"
+  if (
+    key === "messages" ||
+    key === "v1/messages" ||
+    key === "chat/completions" ||
+    key === "v1/chat/completions"
+  ) {
+    return "messages"
+  }
+
+  return null
+}
+
 function endpointForModel(model: { endpoints?: string[] }): EndpointKind {
-  const endpoints = model.endpoints || []
-  if (endpoints.includes("responses")) return "responses"
-  if (endpoints.includes("messages")) return "messages"
+  const endpoints = Array.isArray(model.endpoints) ? model.endpoints : []
+  const kinds = endpoints
+    .map((value) => canonicalEndpointKind(value))
+    .filter((value): value is EndpointKind => value !== null)
+
+  if (kinds.includes("responses")) return "responses"
+  if (kinds.includes("messages")) return "messages"
   return "responses"
 }
 

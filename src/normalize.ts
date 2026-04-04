@@ -12,6 +12,17 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function toBoolean(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value !== 0
+  if (typeof value === "string") {
+    const lower = value.trim().toLowerCase()
+    if (lower === "true" || lower === "1" || lower === "yes") return true
+    if (lower === "false" || lower === "0" || lower === "no") return false
+  }
+  return fallback
+}
+
 function parseThinkingCapabilities(model: JsonRecord): {
   adaptiveThinking: boolean
   minThinkingBudget: number | null
@@ -70,13 +81,49 @@ function detectReasoningSupport(model: JsonRecord): boolean {
 }
 
 function normalizeEndpoints(model: JsonRecord): string[] {
-  const endpointsRaw = (model.supported_endpoints ?? model.endpoints) as unknown
-  const endpoints = Array.isArray(endpointsRaw) ? endpointsRaw : []
-  return endpoints.map((x) => String(x).toLowerCase().replace(/^\//, ""))
+  const endpointsSources = [model.supported_endpoints, model.endpoints]
+  const combined = endpointsSources.flatMap((raw) => (Array.isArray(raw) ? raw : []))
+
+  const normalized = combined
+    .map((value) => {
+      const endpoint = String(value || "").toLowerCase().trim().split("?")[0].split("#")[0]
+      const withoutScheme = endpoint
+        .replace(/^https?:\/\/[^/]+/, "")
+        .replace(/^wss?:\/\/[^/]+/, "")
+      const withoutLeadingSlash = withoutScheme.replace(/^\/+/, "")
+      const key = withoutLeadingSlash.replace(/^wss?:\//, "")
+
+      if (key === "responses" || key === "v1/responses") return "responses"
+      if (
+        key === "messages" ||
+        key === "v1/messages" ||
+        key === "chat/completions" ||
+        key === "v1/chat/completions"
+      ) {
+        return "messages"
+      }
+
+      return key
+    })
+    .filter((endpoint) => endpoint.length > 0)
+
+  return [...new Set(normalized)]
 }
 
 export function normalizeModel(raw: JsonRecord): NormalizedModel {
   const capabilities = (raw.capabilities as JsonRecord | undefined) || {}
+  const billing = (raw.billing as JsonRecord | undefined) || {}
+  const hasPremiumFlag = typeof billing.is_premium === "boolean"
+  const billingMultiplier = toNumber(billing.multiplier)
+  const hasMultiplier = billingMultiplier !== null
+
+  const premiumMetadataKnown = hasPremiumFlag || hasMultiplier
+  const isPremium = hasPremiumFlag
+    ? toBoolean(billing.is_premium, false)
+    : hasMultiplier
+      ? (billingMultiplier as number) > 0
+      : false
+
   const thinking = parseThinkingCapabilities(raw)
   const endpoints = normalizeEndpoints(raw)
   const endpointKind: EndpointKind = thinking.adaptiveThinking && endpoints.includes("messages")
@@ -94,7 +141,11 @@ export function normalizeModel(raw: JsonRecord): NormalizedModel {
     id: String(raw.id || ""),
     name: String(raw.name || raw.id || ""),
     vendor: raw.vendor ? String(raw.vendor) : null,
-    releaseDate: raw.release_date ? String(raw.release_date) : null,
+    modelPickerEnabled: toBoolean(raw.model_picker_enabled, false),
+    modelPickerCategory: raw.model_picker_category ? String(raw.model_picker_category).toLowerCase() : null,
+    isPremium,
+    premiumMetadataKnown,
+    releaseDate: raw.release_date ? String(raw.release_date) : raw.created_at ? String(raw.created_at) : null,
     limits: extractLimits(raw),
     supportsReasoning: detectReasoningSupport(raw),
     capabilities,

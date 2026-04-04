@@ -36,6 +36,7 @@ interface OpenCodeConfig {
   provider: {
     "github-copilot": {
       models: Record<string, OpenCodeModelEntry>
+      whitelist: string[]
     }
   }
   model: string
@@ -50,6 +51,131 @@ function dateAtLeast(value: string | null, min: string): boolean {
   return value >= min
 }
 
+function numericOrZero(value: number | null | undefined): number {
+  return Number.isFinite(value) ? (value as number) : 0
+}
+
+function releaseTimestamp(value: string | null): number {
+  if (!value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function isPowerfulModel(model: NormalizedModel): boolean {
+  return model.modelPickerCategory === "powerful"
+}
+
+function normalizedEfforts(efforts: string[]): string[] {
+  const normalized = efforts
+    .map((effort) => String(effort || "").trim().toLowerCase())
+    .filter((effort) => effort.length > 0)
+  return [...new Set(normalized)]
+}
+
+function compareByNameAndId(a: NormalizedModel, b: NormalizedModel): number {
+  const byName = a.name.localeCompare(b.name)
+  if (byName !== 0) return byName
+  return a.id.localeCompare(b.id)
+}
+
+function parseVersionedId(id: string): { family: string; suffix: string; version: number[] } | null {
+  const match = id.toLowerCase().match(/^([a-z0-9]+)-(\d+(?:\.\d+)*)(.*)$/)
+  if (!match) return null
+
+  const version = match[2].split(".").map((value) => Number(value))
+  if (version.some((value) => !Number.isFinite(value))) return null
+
+  return {
+    family: match[1],
+    suffix: match[3] || "",
+    version,
+  }
+}
+
+function compareVersionVectorsDesc(a: number[], b: number[]): number {
+  const max = Math.max(a.length, b.length)
+  for (let i = 0; i < max; i++) {
+    const av = a[i] ?? 0
+    const bv = b[i] ?? 0
+    if (av !== bv) return bv - av
+  }
+  return 0
+}
+
+function compareByVersionedIdDesc(a: NormalizedModel, b: NormalizedModel): number {
+  const aParsed = parseVersionedId(a.id)
+  const bParsed = parseVersionedId(b.id)
+  if (!aParsed || !bParsed) return 0
+  if (aParsed.family !== bParsed.family) return 0
+  if (aParsed.suffix !== bParsed.suffix) return 0
+  return compareVersionVectorsDesc(aParsed.version, bParsed.version)
+}
+
+function compareDefaultCandidates(a: NormalizedModel, b: NormalizedModel): number {
+  if (a.supportsReasoning !== b.supportsReasoning) return a.supportsReasoning ? -1 : 1
+
+  const byContext = numericOrZero(b.limits?.context) - numericOrZero(a.limits?.context)
+  if (byContext !== 0) return byContext
+
+  const byOutput = numericOrZero(b.limits?.output) - numericOrZero(a.limits?.output)
+  if (byOutput !== 0) return byOutput
+
+  const aEfforts = normalizedEfforts(a.thinking?.supportedEfforts || [])
+  const bEfforts = normalizedEfforts(b.thinking?.supportedEfforts || [])
+  if (aEfforts.length !== bEfforts.length) return bEfforts.length - aEfforts.length
+
+  const aHasTopEffort = aEfforts.includes("xhigh") || aEfforts.includes("max")
+  const bHasTopEffort = bEfforts.includes("xhigh") || bEfforts.includes("max")
+  if (aHasTopEffort !== bHasTopEffort) return aHasTopEffort ? -1 : 1
+
+  const byRelease = releaseTimestamp(b.releaseDate) - releaseTimestamp(a.releaseDate)
+  if (byRelease !== 0) return byRelease
+
+  const byVersionedId = compareByVersionedIdDesc(a, b)
+  if (byVersionedId !== 0) return byVersionedId
+
+  return compareByNameAndId(a, b)
+}
+
+function compareSmallCandidates(a: NormalizedModel, b: NormalizedModel): number {
+  if (a.supportsReasoning !== b.supportsReasoning) return a.supportsReasoning ? -1 : 1
+
+  const byContext = numericOrZero(b.limits?.context) - numericOrZero(a.limits?.context)
+  if (byContext !== 0) return byContext
+
+  const byOutput = numericOrZero(b.limits?.output) - numericOrZero(a.limits?.output)
+  if (byOutput !== 0) return byOutput
+
+  const aEfforts = normalizedEfforts(a.thinking?.supportedEfforts || [])
+  const bEfforts = normalizedEfforts(b.thinking?.supportedEfforts || [])
+  if (aEfforts.length !== bEfforts.length) return bEfforts.length - aEfforts.length
+
+  const byRelease = releaseTimestamp(b.releaseDate) - releaseTimestamp(a.releaseDate)
+  if (byRelease !== 0) return byRelease
+
+  return compareByNameAndId(a, b)
+}
+
+function isPickerPolicyEnabled(model: NormalizedModel): boolean {
+  const rawPolicy = (model.raw?.policy as Record<string, unknown> | undefined) || {}
+  const state = typeof rawPolicy.state === "string" ? rawPolicy.state.toLowerCase() : null
+  return state !== "disabled"
+}
+
+function isModelEnabledForConfig(model: NormalizedModel): boolean {
+  return model.modelPickerEnabled && isPickerPolicyEnabled(model)
+}
+
+function isLikelyNonPremiumWhenUnknown(model: NormalizedModel): boolean {
+  const id = model.id.toLowerCase()
+  if (id === "gpt-5-mini") return true
+  if (id.startsWith("gpt-4")) return true
+  if (id.startsWith("gpt-3.5")) return true
+  if (id.startsWith("gpt-41-")) return true
+  if (id.startsWith("oswe-vscode")) return true
+  return false
+}
+
 function copilotEffortVariant(effort: string): VariantOptions {
   return {
     reasoningEffort: effort,
@@ -60,6 +186,11 @@ function copilotEffortVariant(effort: string): VariantOptions {
 
 function buildCopilotVariants(model: NormalizedModel): Record<string, VariantOptions> {
   if (!model.supportsReasoning) return {}
+
+  const metadataEfforts = normalizedEfforts(model.thinking?.supportedEfforts || [])
+  if (metadataEfforts.length > 0) {
+    return Object.fromEntries(metadataEfforts.map((effort) => [effort, copilotEffortVariant(effort)]))
+  }
 
   const id = model.id.toLowerCase()
   if (EXCLUDED_MODEL_FAMILIES.some((entry) => id.includes(entry))) return {}
@@ -187,16 +318,56 @@ export function buildProviderModels(
 
 export function pickDefaultModel(models: NormalizedModel[]): string | null {
   if (!Array.isArray(models) || models.length === 0) return null
-  return models[0].id
+
+  const powerful = models.filter((model) => isPowerfulModel(model))
+  const powerfulPremium = powerful.filter((model) => model.isPremium)
+  if (powerfulPremium.length > 0) {
+    return [...powerfulPremium].sort(compareDefaultCandidates)[0]?.id || null
+  }
+
+  if (powerful.length > 0) {
+    return [...powerful].sort(compareDefaultCandidates)[0]?.id || null
+  }
+
+  const premium = models.filter((model) => model.isPremium)
+  const candidates = premium.length > 0 ? premium : models
+  return [...candidates].sort(compareDefaultCandidates)[0]?.id || null
+}
+
+function pickSmallModel(models: NormalizedModel[]): string | null {
+  if (!Array.isArray(models) || models.length === 0) return null
+
+  const nonPremiumKnown = models.filter((model) => model.premiumMetadataKnown && !model.isPremium)
+  if (nonPremiumKnown.length > 0) {
+    const nonPremium = nonPremiumKnown.sort(compareSmallCandidates)
+    if (nonPremium.length > 0) return nonPremium[0].id
+    return null
+  }
+
+  const nonPremiumInferred = models.filter((model) => !model.premiumMetadataKnown && isLikelyNonPremiumWhenUnknown(model))
+  if (nonPremiumInferred.length > 0) {
+    const inferred = nonPremiumInferred.sort(compareSmallCandidates)
+    if (inferred.length > 0) return inferred[0].id
+  }
+
+  return null
 }
 
 export function buildOpenCodeConfig(models: NormalizedModel[], overrides?: OpenCodeConfigOverrides): OpenCodeConfig {
-  const defaultModel = pickDefaultModel(models)
+  const enabledModels = models.filter((model) => isModelEnabledForConfig(model))
+  const defaultModel = pickDefaultModel(enabledModels)
+  const smallModel = pickSmallModel(enabledModels)
   const modelId = defaultModel
     ? `github-copilot/${defaultModel}`
     : "github-copilot/unknown"
-  const smallModelId = "github-copilot/gpt-5-mini"
-  const modelOverrides = overrides?.provider?.["github-copilot"]?.models
+  const smallModelId = smallModel
+    ? `github-copilot/${smallModel}`
+    : "github-copilot/unknown"
+  const modelOverridesRaw = overrides?.provider?.["github-copilot"]?.models
+  const enabledIds = new Set(enabledModels.map((model) => model.id))
+  const modelOverrides = modelOverridesRaw
+    ? Object.fromEntries(Object.entries(modelOverridesRaw).filter(([modelIdKey]) => enabledIds.has(modelIdKey)))
+    : undefined
 
   return {
     $schema: "https://opencode.ai/config.json",
@@ -205,7 +376,8 @@ export function buildOpenCodeConfig(models: NormalizedModel[], overrides?: OpenC
     enabled_providers: ["github-copilot"],
     provider: {
       "github-copilot": {
-        models: buildProviderModels(models, modelOverrides),
+        models: buildProviderModels(enabledModels, modelOverrides),
+        whitelist: enabledModels.map((model) => model.id).sort((a, b) => a.localeCompare(b)),
       },
     },
     model: modelId,

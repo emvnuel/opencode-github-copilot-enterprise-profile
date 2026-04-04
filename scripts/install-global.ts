@@ -91,18 +91,22 @@ async function installGlobalConfig(): Promise<void> {
   const existing = await readJson<Record<string, unknown>>(globalConfigFile, {})
   const models =
     ((generated.provider as Record<string, unknown> | undefined)?.["github-copilot"] as Record<string, unknown> | undefined)?.models || {}
+  const whitelist =
+    ((generated.provider as Record<string, unknown> | undefined)?.["github-copilot"] as Record<string, unknown> | undefined)?.whitelist || []
   const merged = deepMerge(existing, {
     share: "disabled",
     disabled_providers: ["opencode"],
     enabled_providers: ["github-copilot"],
-    provider: {
-      "github-copilot": {
-        models,
-      },
-    },
     model: generated.model,
     small_model: generated.small_model,
   }) as Record<string, unknown>
+
+  const provider = ((merged.provider as Record<string, unknown> | undefined) || {})
+  const githubCopilot = ((provider["github-copilot"] as Record<string, unknown> | undefined) || {})
+  githubCopilot.models = models
+  githubCopilot.whitelist = whitelist
+  provider["github-copilot"] = githubCopilot
+  merged.provider = provider
 
   await mkdir(globalConfigDir, { recursive: true })
   await writeFile(globalConfigFile, `${JSON.stringify(merged, null, 2)}\n`, "utf8")
