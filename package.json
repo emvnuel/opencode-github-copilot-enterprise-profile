@@ -3,6 +3,7 @@
   "version": "0.1.3",
   "type": "module",
   "description": "OpenCode plugin/runtime for GitHub Copilot Enterprise model catalog and config overlays.",
+  "license": "MIT",
   "files": [
     "dist",
     "README.md"
